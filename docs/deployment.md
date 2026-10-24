@@ -44,4 +44,6 @@ GoDaddy DNS 添加单条记录：
 - 已创建公开仓库，首个代码提交为 `4e2ec9d`。
 - 首次发布的测试和构建通过；Configure Pages 因当时 Pages 尚未启用而失败。
 - 已在仓库设置启用 GitHub Actions 发布，并保存项目自定义域名。
-- DNS 与证书的最终验证结果将在确认后记录，不能将待生效状态视为已上线。
+- 工作流 [40063982959](https://github.com/xindoucha/briefly-english/actions/runs/40063982959) 的 build、deploy 均已成功。
+- GoDaddy 已保存 `briefly-english → xindoucha.github.io`；Google、Cloudflare 与权威 DNS 查询均已返回该记录。
+- DNS 生效后按 GitHub 文档重新绑定过一次域名以触发 HTTPS 证书签发。当前正在验证证书与边缘缓存；未通过正常 HTTPS 验证前，不宣称安全上线完成。
