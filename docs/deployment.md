@@ -47,7 +47,7 @@ GoDaddy DNS 添加单条记录：
 - 已在仓库设置启用 GitHub Actions 发布，并保存项目自定义域名。
 - 工作流 [40063982959](https://github.com/xindoucha/briefly-english/actions/runs/40063982959) 的 build、deploy 均已成功。
 - GoDaddy 已保存 `briefly-english → xindoucha.github.io`；Google、Cloudflare 与权威 DNS 查询均已返回该记录。
-- DNS 生效后按 GitHub 文档重新绑定过一次域名以触发 HTTPS 证书签发。当前正在验证证书与边缘缓存；未通过正常 HTTPS 验证前，不宣称安全上线完成。
+- DNS 生效后按 GitHub 文档重新绑定过一次域名以触发 HTTPS 证书签发。后续已通过正常 HTTPS 证书验证。
 
 ## 第一期开源媒体部署
 
@@ -58,3 +58,12 @@ GoDaddy DNS 添加单条记录：
 媒体通过一次性独立分支传输，再由 GitHub Actions 保存为 Release；发布确认后删除临时上传分支。main 不包含媒体二进制。所有播放器地址保持 `/media/first-briefing/`，访问者不需要连接 YouTube。
 
 当前第一期完整站点约 250 MiB，低于 Pages 1 GB 上限。Pages 月带宽有软限制，扩展多期或流量增长时可将媒体迁移到对象存储/CDN，仅修改 mediaRoot；不应无限累积整期视频。
+
+## 2026-10-25 同步上线记录
+
+- 网页与媒体提交：`6cd18eb`。
+- 媒体发布工作流 `40110666833` 成功，Release 附件大小 261,508,096 字节。
+- Pages 工作流 https://github.com/xindoucha/briefly-english/actions/runs/40112070059 的 build/deploy 成功。
+- 正式域名正常 HTTPS 返回 200；全部 18 个媒体路径存在且长度与本地一致。整期 MP3 支持 Range/206；Pages 返回 MP3 MIME 为 audio/mp3。
+- 临时上传分支 media-upload-v1 已删除；main 历史仅含代码和说明，大文件保存在 Release 及发布产物中。
+- 浏览器预览工具在本轮线上验收时超时；本地交互验收已有记录，线上通过部署状态、资源接口与文件内容核验。
