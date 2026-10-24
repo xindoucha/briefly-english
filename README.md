@@ -2,7 +2,7 @@
 
 面向海外英语学习者，以莱维特白宫记者会为第一批素材，训练发音、表达与真实问答听力。手机优先，兼容电脑。
 
-当前阶段：本地体验版本。未创建远程仓库、未推送、未发布。原始视频远程加载，不包含在项目中。
+当前阶段：可运行体验版本，代码已推送至 [xindoucha/briefly-english](https://github.com/xindoucha/briefly-english)。已加入 GitHub Pages 自动发布配置，域名与上线状态见 [发布记录](docs/deployment.md)。原始视频远程加载，不包含在项目中。
 
 ## 本地运行
 
@@ -58,5 +58,6 @@ npm run build # 生成 dist/，可交给静态托管服务
 - [决策与实施路线](docs/decisions-and-roadmap.md)：已确认事项、建议默认值、待验证问题与交付标准。
 - [实现与验证记录](docs/implementation.md)：当前功能、已执行检查与待验收项目。
 - [课程重组与学习体验优化](docs/changes-2026-10-24.md)：本次四项优化、素材清单、兼容性与发音资料来源。
+- [GitHub Pages 发布](docs/deployment.md)：远程仓库、自动发布与域名配置。
 
 上述文档是后续实现的共同依据。新增需求应同时更新相关决策与范围。
