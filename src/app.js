@@ -4,11 +4,14 @@ import {createSpeechController} from './speech.js';
 import {transcriptText} from './transcript.js';
 import {readState, writeState, toggleFavorite, emptyState, STORAGE_KEY} from './storage.js';
 import {saveRecording, allRecordings, deleteRecording, clearRecordings} from './recordings.js';
+import {connectPodcast} from './podcast.js';
+import {createLocalPlayer, clipMedia} from './local-media.js';
 import {createYouTubePlayer} from './youtube.js';
 
 const $ = selector => document.querySelector(selector);
 const app = $('#app');
 let source=initialSource;
+let disconnectPodcast;
 let state;
 try { state = readState(localStorage); } catch { state = emptyState(); }
 let filter = '全部', activeLesson, currentLine = 0, currentStep = 0;
@@ -67,10 +70,12 @@ function courseCard(course) {
   return `<a class="course-card episode-card" href="#/course/${course.id}"><div class="course-art art-01" aria-hidden="true"><span class="art-series">THE BRIEFING SERIES · EPISODE ${course.number}</span><span class="art-quote">One briefing.<br>Many ways to speak.</span><span class="art-number">${course.number}</span><span class="art-play">${icon('arrow',18)}</span></div><div class="card-body"><div class="card-meta"><span>第 ${course.number} 期 · ${course.date}</span><span>${formatTime(course.durationSeconds)} 完整视频</span></div><h3>${course.title}</h3><p>${course.description}</p><div class="episode-progress"><div><i style="width:${progress.percent}%"></i></div><span>${progress.completed} / ${progress.total} 个片段已完成</span></div><div class="card-bottom"><span>${course.speaker}</span><span>查看本期课程 →</span></div></div></a>`;
 }
 function renderCourse(course) {
+  disconnectPodcast?.();disconnectPodcast=null;
+  document.querySelectorAll('#podcast-player, #full-video-panel video').forEach(player=>player.pause());
   activeLesson=null;
   const items=courseSegments(course.id),progress=courseProgress(course.id,state.progress);
   const last=items.find(item=>item.id===state.last),next=last||items.find(item=>!state.progress[item.id]?.completed)||items[0];
-  app.innerHTML=`${header()}<main id="main" class="container course-page" tabindex="-1"><a class="back-link" href="#/">${icon('back',17)} 全部课程</a><div class="course-intro"><div><div class="eyebrow">THE BRIEFING SERIES · EPISODE ${course.number}</div><h1>第 ${course.number} 期 · ${course.title}</h1><p class="course-subtitle">${course.subtitle} · ${course.date}</p><p>${course.description}</p><div class="course-badges"><span>${items.length} 个学习片段</span><span>${formatTime(course.durationSeconds)} 原片</span><span>字幕参考公开时间轴</span></div><div class="course-actions"><a class="button primary" href="${segmentUrl(next)}">${last?'继续上次片段':'开始本期练习'} ${icon('arrow',17)}</a><button class="button secondary" data-action="full-video" data-id="${course.id}" aria-expanded="false">${icon('play',17)} 观看完整视频</button></div></div><aside class="course-progress-box"><span class="label">本期学习进度</span><strong>${progress.completed}<small> / ${progress.total}</small></strong><span>个片段已完成</span><div class="progress-track"><i style="width:${progress.percent}%"></i></div><p>${last?'当前片段：'+last.title+' · '+steps[state.progress[last.id]?.step||0]:'按顺序练习，也可以从感兴趣的片段开始。'}</p></aside></div><div id="full-video-panel" class="full-video-panel" hidden></div><section class="course-directory"><div class="section-heading"><div><div class="eyebrow">CHOOSE A MOMENT TO PRACTICE</div><h2>本期片段目录</h2></div><p>按原片时间排列 · 每个片段都可单独学习</p></div><div class="filters" role="group" aria-label="按片段能力筛选">${['全部',...new Set(items.map(item=>item.category))].map(category=>`<button class="chip ${filter===category?'selected':''}" data-action="filter" data-value="${category}" aria-pressed="${filter===category}">${category}</button>`).join('')}</div><div class="segment-grid">${items.filter(item=>filter==='全部'||item.category===filter).map(card).join('')}</div></section><div class="course-source"><p>一场原片，一期课程；片段保留独立标识与学习进度。部分片段为陈述节选，问答片段标明记者与发言人。</p><a href="${course.source.official}" target="_blank" rel="noopener noreferrer">官方原片 ↗</a> · <a href="${course.source.subtitles}" target="_blank" rel="noopener noreferrer">字幕与时间轴来源 ↗</a><p>英文和时间轴尚待人工复听。发音技巧解释常见规律，不是已核验的个人发音转写。</p></div></main>${footer()}`;
+  app.innerHTML=`${header()}<main id="main" class="container course-page" tabindex="-1"><a class="back-link" href="#/">${icon('back',17)} 全部课程</a><div class="course-intro"><div><div class="eyebrow">THE BRIEFING SERIES · EPISODE ${course.number}</div><h1>第 ${course.number} 期 · ${course.title}</h1><p class="course-subtitle">${course.subtitle} · ${course.date}</p><p>${course.description}</p><div class="course-badges"><span>${items.length} 个学习片段</span><span>${formatTime(course.durationSeconds)} 原片</span><span>字幕参考公开时间轴</span></div><div class="course-actions"><a class="button primary" href="${segmentUrl(next)}">${last?'继续上次片段':'开始本期练习'} ${icon('arrow',17)}</a><button class="button secondary" data-action="full-video" data-id="${course.id}" aria-expanded="false">${icon('play',17)} 观看完整视频</button><button class="button secondary" data-action="full-audio" data-id="${course.id}" aria-expanded="false">${icon('sound',17)} 收听整期</button><a class="text-link" href="${course.source.mediaRoot}/full-audio.mp3" download="briefly-episode-01.mp3">下载整期 MP3 ↓</a></div></div><aside class="course-progress-box"><span class="label">本期学习进度</span><strong>${progress.completed}<small> / ${progress.total}</small></strong><span>个片段已完成</span><div class="progress-track"><i style="width:${progress.percent}%"></i></div><p>${last?'当前片段：'+last.title+' · '+steps[state.progress[last.id]?.step||0]:'按顺序练习，也可以从感兴趣的片段开始。'}</p></aside></div><div id="full-video-panel" class="full-video-panel" hidden></div><section id="podcast-panel" class="podcast-panel" hidden></section><section class="course-directory"><div class="section-heading"><div><div class="eyebrow">CHOOSE A MOMENT TO PRACTICE</div><h2>本期片段目录</h2></div><p>按原片时间排列 · 每个片段都可单独学习</p></div><div class="filters" role="group" aria-label="按片段能力筛选">${['全部',...new Set(items.map(item=>item.category))].map(category=>`<button class="chip ${filter===category?'selected':''}" data-action="filter" data-value="${category}" aria-pressed="${filter===category}">${category}</button>`).join('')}</div><div class="segment-grid">${items.filter(item=>filter==='全部'||item.category===filter).map(card).join('')}</div></section><div class="course-source"><p>一场原片，一期课程；片段保留独立标识与学习进度。部分片段为陈述节选，问答片段标明记者与发言人。</p><a href="${course.source.official}" target="_blank" rel="noopener noreferrer">官方原片 ↗</a> · <a href="${course.source.subtitles}" target="_blank" rel="noopener noreferrer">字幕与时间轴来源 ↗</a><p>英文和时间轴尚待人工复听。发音技巧解释常见规律，不是已核验的个人发音转写。</p></div></main>${footer()}`;
 }
 function renderHome() {
   activeLesson = null;
@@ -90,8 +95,8 @@ function renderLesson(lesson) {
   currentLine = Math.max(0, Math.min(lesson.lines.length - 1, Number(progress?.line) || 0));
   playbackTime = lesson.start;
   loop = false;
-  app.innerHTML = `${header('learn',true,'#/course/'+course.id)}<main id="main" class="container lesson-main" tabindex="-1"><div class="lesson-heading"><div class="eyebrow">第 ${course.number} 期 / 学习片段 ${lesson.number} · ${courseSegments(course.id).length} 段</div><h1>${lesson.title}</h1><p>${lesson.english}</p><details class="fragment-context"><summary>片段语境与本期进度</summary><p>${lesson.context||lesson.description}</p><p id="fragment-progress">第 ${course.number} 期 · 已完成 ${courseProgress(course.id,state.progress).completed} / ${courseSegments(course.id).length} 个片段 · 当前练到「${steps[currentStep]}」</p><a href="#/course/${course.id}" class="text-link">查看本期全部片段 →</a></details></div><div class="lesson-layout"><section class="media-column" aria-label="视频与原文"><div class="video-shell"><video id="video" controls playsinline preload="none" aria-label="莱维特记者会原片"><source src="${source.media}#t=${lesson.start},${lesson.end}" type="video/webm"></video><div id="video-cover" class="video-cover"><span class="eyebrow">JANUARY 28, 2025 · THE WHITE HOUSE</span><strong>${lesson.english}</strong><button class="cover-play" data-action="play">${icon('play',28)}<span>播放原片</span></button><small>片段 ${formatTime(lesson.start)} — ${formatTime(lesson.end)}</small></div><div class="audio-cover" hidden><span>${icon('sound',48)}</span><strong>专注声音，跟上节奏。</strong><p>原视频音轨 · 不单独下载</p></div></div><div class="media-toolbar"><button id="transport" class="plain transport" data-action="play" aria-label="播放">${icon('play',17)}</button><button class="plain" data-action="audio" aria-pressed="false">${icon('sound',17)} <span>专注音频</span></button><span id="time-label">0:00 / ${formatTime(duration(lesson))}</span><label class="speed-label">语速 <select id="speed" aria-label="播放速度"><option value="0.75">0.75×</option><option value="0.85">0.85×</option><option value="1" selected>1×</option><option value="1.15">1.15×</option></select></label></div><div id="media-error" class="notice" hidden>视频加载较慢或暂时不可用。可重试或切换官方 YouTube。<button class="text-link" data-action="retry">重新加载</button> · <a href="${source.youtube}&t=${Math.floor(lesson.start)}s" target="_blank" rel="noopener noreferrer">打开官方视频 ↗</a></div><div class="source-row"><span>Karoline Leavitt <span class="muted">· ${source.date}</span></span><a href="${source.official}" target="_blank" rel="noopener noreferrer">原片来源 ${icon('external',13)}</a></div><details class="transcript" open><summary>完整片段字幕 <span>可选中文字复制</span></summary><div class="transcript-settings"><button class="chip small" data-action="subtitles" aria-pressed="${subtitles}">英文 ${subtitles?'开':'关'}</button><button class="chip small" data-action="chinese" aria-pressed="${chinese}">中文 ${chinese?'开':'关'}</button><button class="plain" data-action="copy-transcript">复制字幕</button><button class="plain" data-action="follow">当前句 ↓</button></div><div id="transcript-lines"></div></details><div class="media-alternative"><span>播放遇到问题？</span><button class="text-link" data-action="youtube">使用 YouTube 播放</button></div><details class="source-details"><summary>素材与字幕说明</summary><p>视频制作：The White House。点击播放优先连接官方 YouTube，失败时尝试 Wikimedia Commons 直连文件；其文件页标注为美国联邦政府公有领域作品。英文与时间轴参考公开字幕，尚待人工复听；中文、发音提示及练习为本站编写。</p><p><a href="${source.commons}" target="_blank" rel="noopener noreferrer">媒体与许可记录 ↗</a> · <a href="${source.subtitles}" target="_blank" rel="noopener noreferrer">字幕记录 ↗</a></p><p>原片中的政策观点属于发言人，不代表本站立场。第三方媒体服务可能接收播放请求。</p></details></section><section class="practice-column" aria-label="学习练习"><div class="step-tabs" role="tablist" aria-label="学习步骤">${steps.map((step,i)=>`<button id="tab-${i}" role="tab" aria-controls="practice-panel" data-action="step" data-step="${i}"><span>0${i+1}</span>${step}</button>`).join('')}</div><div id="practice-panel" role="tabpanel" tabindex="0"></div><div class="step-bottom"><button class="plain" id="previous-step" data-action="previous-step">${icon('back',16)} 上一步</button><span id="step-position"></span><button class="text-link" id="next-step" data-action="next-step">下一步 ${icon('arrow',17)}</button></div></section></div></main>${footer()}`;
-  video = $('#video');
+  app.innerHTML = `${header('learn',true,'#/course/'+course.id)}<main id="main" class="container lesson-main" tabindex="-1"><div class="lesson-heading"><div class="eyebrow">第 ${course.number} 期 / 学习片段 ${lesson.number} · ${courseSegments(course.id).length} 段</div><h1>${lesson.title}</h1><p>${lesson.english}</p><details class="fragment-context"><summary>片段语境与本期进度</summary><p>${lesson.context||lesson.description}</p><p id="fragment-progress">第 ${course.number} 期 · 已完成 ${courseProgress(course.id,state.progress).completed} / ${courseSegments(course.id).length} 个片段 · 当前练到「${steps[currentStep]}」</p><a href="#/course/${course.id}" class="text-link">查看本期全部片段 →</a></details></div><div class="lesson-layout"><section class="media-column" aria-label="视频与原文"><div class="video-shell"><video id="video" controls playsinline preload="none" aria-label="莱维特记者会原片"><source src="${clipMedia(source,lesson)}" type="video/mp4"></video><div id="video-cover" class="video-cover"><span class="eyebrow">JANUARY 28, 2025 · THE WHITE HOUSE</span><strong>${lesson.english}</strong><button class="cover-play" data-action="play">${icon('play',28)}<span>播放原片</span></button><small>片段 ${formatTime(lesson.start)} — ${formatTime(lesson.end)}</small></div><div class="audio-cover" hidden><span>${icon('sound',48)}</span><strong>专注声音，跟上节奏。</strong><p>独立音频文件 · 节省流量</p></div></div><div class="media-toolbar"><button id="transport" class="plain transport" data-action="play" aria-label="播放">${icon('play',17)}</button><button class="plain" data-action="audio" aria-pressed="false">${icon('sound',17)} <span>专注音频</span></button><span id="time-label">0:00 / ${formatTime(duration(lesson))}</span><label class="speed-label">语速 <select id="speed" aria-label="播放速度"><option value="0.75">0.75×</option><option value="0.85">0.85×</option><option value="1" selected>1×</option><option value="1.15">1.15×</option></select></label></div><div id="media-error" class="notice" hidden>视频加载较慢或暂时不可用。可重试或切换官方 YouTube。<button class="text-link" data-action="retry">重新加载</button> · <a href="${source.youtube}&t=${Math.floor(lesson.start)}s" target="_blank" rel="noopener noreferrer">打开官方视频 ↗</a></div><div class="source-row"><span>Karoline Leavitt <span class="muted">· ${source.date}</span></span><a href="${source.official}" target="_blank" rel="noopener noreferrer">原片来源 ${icon('external',13)}</a></div><details class="transcript" open><summary>完整片段字幕 <span>可选中文字复制</span></summary><div class="transcript-settings"><button class="chip small" data-action="subtitles" aria-pressed="${subtitles}">英文 ${subtitles?'开':'关'}</button><button class="chip small" data-action="chinese" aria-pressed="${chinese}">中文 ${chinese?'开':'关'}</button><button class="plain" data-action="copy-transcript">复制字幕</button><button class="plain" data-action="follow">当前句 ↓</button></div><div id="transcript-lines"></div></details><div class="media-alternative"><span>播放遇到问题？</span><button class="text-link" data-action="youtube">使用 YouTube 播放</button></div><details class="source-details"><summary>素材与字幕说明</summary><p>视频制作：The White House。本站播放由 Wikimedia Commons 原文件转制的视频和独立音频，YouTube 作为手动备用入口；其文件页标注为美国联邦政府公有领域作品。英文与时间轴参考公开字幕，尚待人工复听；中文、发音提示及练习为本站编写。</p><p><a href="${source.commons}" target="_blank" rel="noopener noreferrer">媒体与许可记录 ↗</a> · <a href="${source.subtitles}" target="_blank" rel="noopener noreferrer">字幕记录 ↗</a></p><p>原片中的政策观点属于发言人，不代表本站立场。第三方媒体服务可能接收播放请求。</p></details></section><section class="practice-column" aria-label="学习练习"><div class="step-tabs" role="tablist" aria-label="学习步骤">${steps.map((step,i)=>`<button id="tab-${i}" role="tab" aria-controls="practice-panel" data-action="step" data-step="${i}"><span>0${i+1}</span>${step}</button>`).join('')}</div><div id="practice-panel" role="tabpanel" tabindex="0"></div><div class="step-bottom"><button class="plain" id="previous-step" data-action="previous-step">${icon('back',16)} 上一步</button><span id="step-position"></span><button class="text-link" id="next-step" data-action="next-step">下一步 ${icon('arrow',17)}</button></div></section></div></main>${footer()}`;
+  video = createLocalPlayer($('#video'),lesson);
   const nativeVideo=video;
   video.addEventListener('loadedmetadata', () => {
     if(video!==nativeVideo)return;
@@ -105,6 +110,7 @@ function renderLesson(lesson) {
     mediaWaitTimer=setTimeout(()=>{if($('#media-error'))$('#media-error').hidden=false;},10000);
   });
   video.addEventListener('pause', updatePlayButton);
+  video.addEventListener('ended',()=>{if(video!==nativeVideo)return;if(loop)playFrom(lesson.lines[currentLine].start);else if(comparePlaying){comparePlaying=false;playRecording();}});
   video.addEventListener('timeupdate', tick);
   video.addEventListener('error', () => { if(video===nativeVideo&&$('#media-error'))$('#media-error').hidden = false; });
   $('#speed').addEventListener('change', event => { video.playbackRate = Number(event.target.value); });
@@ -183,8 +189,8 @@ function tick() {
   playbackTime = video.currentTime;
   if (!video.paused && !video.seeking && video.readyState >= 2) {
     if (loop && playbackTime >= lesson.lines[currentLine].end) video.currentTime = lesson.lines[currentLine].start;
-    else if (currentStep===1 && !comparePlaying && playbackTime >= lesson.lines[currentLine].end - 0.02) video.pause();
-    else if (playbackTime >= lesson.end - 0.03) { video.pause(); if (comparePlaying) { comparePlaying=false; playRecording(); } }
+    else if (!loop && currentStep===1 && !comparePlaying && playbackTime >= lesson.lines[currentLine].end - 0.02) video.pause();
+    else if (!loop && playbackTime >= lesson.end - 0.03) { video.pause(); if (comparePlaying) { comparePlaying=false; playRecording(); } }
     else if (!loop && !comparePlaying) {
       const index = sentenceAt(lesson,playbackTime);
       if (index >= 0 && index!==currentLine && currentStep!==1) { currentLine=index; highlightTranscript(); }
@@ -205,15 +211,10 @@ function updatePlayButton() {
 async function playFrom(time) {
   if (!video || recordingPending || recorder?.state==='recording') { if (recordingPending || recorder?.state==='recording') toast('先结束录音，再播放原声。'); return; }
   if(youtubeLoading){toast('播放器正在连接，请稍候。');return;}
-  if(!video.isYouTube && !youtubeTried){
-    youtubeTried=true;
-    const epoch=routeEpoch;
-    await switchYouTube($('[data-action="youtube"]'));
-    if(epoch!==routeEpoch || !video)return;
-  }
   stopAudio();
   try {
     if (time !== undefined) video.currentTime=time;
+    else if(video.currentTime>=activeLesson.end-0.1)video.currentTime=activeLesson.start;
     if (!video.currentSrc) video.load();
     await video.play();
     $('#video-cover').hidden=true;
@@ -349,7 +350,7 @@ async function renderMe() {
 }
 function renderAbout() {
   activeLesson=null;
-  app.innerHTML=`${header()}<main id="main" class="container inner-page prose" tabindex="-1"><div class="eyebrow">BEHIND THE PRACTICE</div><h1>关于素材与隐私</h1><h2>独立的英语学习项目</h2><p>Briefly 通过真实记者会片段帮助学习者练习听力、发音与表达。与白宫、发言人及素材平台没有隶属或背书关系。原始发言中的观点不代表本站观点，政治陈述未在本站逐条核验。</p><h2>素材与字幕</h2><p>首批片段来自 2025 年 1 月 28 日记者会，制作主体为 The White House。媒体远程加载自 Wikimedia Commons，其文件页标注为美国联邦政府公有领域作品。完整来源与许可记录均在课程页提供。</p><p>英文与时间轴参考公开字幕，目前尚待人工复听。中文翻译、发音提示、情境题与迁移例句为本站编写。当前第 1 期课程包含 ${lessons.length} 个学习片段，既有短句也有问答。发音技巧是常见连贯语流规律提示，尚非逐句音频转写。</p><p><a href="${source.official}" target="_blank" rel="noopener noreferrer">官方原片页面 ↗</a><br><a href="${source.commons}" target="_blank" rel="noopener noreferrer">视频文件与许可记录 ↗</a><br><a href="${source.subtitles}" target="_blank" rel="noopener noreferrer">公开字幕记录 ↗</a></p><h2>例句语音</h2><p>迁移例句使用浏览器和系统的语音合成，优先选择美式英语声线，不模仿莱维特。语音可用性由设备决定；部分系统语音可能联网处理文本。本站不上传个人录音。</p><h2>本机数据</h2><p>收藏与学习进度保存在 localStorage，主动保存的录音存放于 IndexedDB。本站没有账号、录音上传、广告分析或服务器数据库。清除浏览器数据、使用隐私模式或更换设备，可能无法保留记录。</p><p>访问网站时，托管服务可能记录正常访问日志；播放远程视频会向 Wikimedia 发送媒体请求；点击播放时优先加载 YouTube 播放器 API 和隐私增强嵌入，失败后尝试直连视频。在新窗口打开来源会访问相应第三方平台。本站不会默认请求麦克风，只有点击录音后才请求。</p><h2>浏览器支持</h2><p>录音需要 HTTPS 或 localhost，以及支持 MediaRecorder 的浏览器。优先使用官方 YouTube 嵌入。直连备用视频采用 WebM，部分浏览器或网络环境可能无法播放；可通过来源链接打开官方视频。音频模式播放同一个视频的音轨，不提供后台播放或离线可用保证。</p><a class="button primary" href="#/">返回学习 ${icon('arrow',18)}</a></main>${footer()}`;
+  app.innerHTML=`${header()}<main id="main" class="container inner-page prose" tabindex="-1"><div class="eyebrow">BEHIND THE PRACTICE</div><h1>关于素材与隐私</h1><h2>独立的英语学习项目</h2><p>Briefly 通过真实记者会片段帮助学习者练习听力、发音与表达。与白宫、发言人及素材平台没有隶属或背书关系。原始发言中的观点不代表本站观点，政治陈述未在本站逐条核验。</p><h2>素材与字幕</h2><p>首批片段来自 2025 年 1 月 28 日记者会，制作主体为 The White House。媒体母版来自 Wikimedia Commons，本站播放转码后的文件，其文件页标注为美国联邦政府公有领域作品。完整来源与许可记录均在课程页提供。</p><p>英文与时间轴参考公开字幕，目前尚待人工复听。中文翻译、发音提示、情境题与迁移例句为本站编写。当前第 1 期课程包含 ${lessons.length} 个学习片段，既有短句也有问答。发音技巧是常见连贯语流规律提示，尚非逐句音频转写。</p><p><a href="${source.official}" target="_blank" rel="noopener noreferrer">官方原片页面 ↗</a><br><a href="${source.commons}" target="_blank" rel="noopener noreferrer">视频文件与许可记录 ↗</a><br><a href="${source.subtitles}" target="_blank" rel="noopener noreferrer">公开字幕记录 ↗</a></p><h2>例句语音</h2><p>迁移例句使用浏览器和系统的语音合成，优先选择美式英语声线，不模仿莱维特。语音可用性由设备决定；部分系统语音可能联网处理文本。本站不上传个人录音。</p><h2>本机数据</h2><p>收藏与学习进度保存在 localStorage，主动保存的录音存放于 IndexedDB。本站没有账号、录音上传、广告分析或服务器数据库。清除浏览器数据、使用隐私模式或更换设备，可能无法保留记录。</p><p>访问网站时，托管服务可能记录正常访问日志；本站视频和音频从当前站点加载；只有手动切换 YouTube 时才加载其播放器 API 和隐私增强嵌入。在新窗口打开来源会访问相应第三方平台。本站不会默认请求麦克风，只有点击录音后才请求。</p><h2>浏览器支持</h2><p>录音需要 HTTPS 或 localhost，以及支持 MediaRecorder 的浏览器。本站视频采用 MP4（H.264 / AAC），独立音频为 MP3。可下载整期音频离线收听；手机浏览器后台播放能力依设备而定。</p><a class="button primary" href="#/">返回学习 ${icon('arrow',18)}</a></main>${footer()}`;
 }
 function finishLesson() {
   if(recorder?.state==='recording'||recordingPending){toast('请先结束录音，并保存或导出需要保留的内容。');return;}
@@ -363,6 +364,8 @@ function finishLesson() {
   $('#main').focus();
 }
 function cleanup() {
+  disconnectPodcast?.();disconnectPodcast=null;
+  document.querySelectorAll('#podcast-player, #full-video-panel video').forEach(player=>{player.pause();player.removeAttribute('src');player.load();});
   recordingEpoch++;clipKey=null;stopRecording();comparePlaying=false;stopAudio();
   clearInterval(timer);clearTimeout(mediaWaitTimer);youtubeLoading=false;
   if(video){video.pause();if(video.isYouTube)video.destroy();else{video.removeAttribute('src');video.querySelector('source')?.removeAttribute('src');video.load();}video=null;}
@@ -428,7 +431,11 @@ app.addEventListener('click',async event=>{
     button.classList.add(correct?'correct':'incorrect');$('#answer-feedback').textContent=correct?'理解正确！接下来，留意她的语气与节奏。':'再听一遍试试，或选择另一个答案。';
   }
   else if(action==='audio'){
-    const enabled=button.getAttribute('aria-pressed')!=='true';
+    if(video.isYouTube){toast('当前使用 YouTube，请重新进入片段后切换本站音频。');return;}
+    if(recordingPending||recorder?.state==='recording'){toast('请先结束录音。');return;}
+    const enabled=button.getAttribute('aria-pressed')!=='true',playing=!video.paused;
+    video.setSource(clipMedia(source,activeLesson,enabled));
+    if(playing)playFrom();
     button.setAttribute('aria-pressed',String(enabled));button.querySelector('span').textContent=enabled?'返回视频':'专注音频';$('.video-shell').classList.toggle('audio-mode',enabled);$('.audio-cover').hidden=!enabled;
   }
   else if(action==='retry'){if(!video.isYouTube)video.load();$('#media-error').hidden=true;playFrom(activeLesson.lines[currentLine].start);}
@@ -451,8 +458,26 @@ app.addEventListener('click',async event=>{
   else if(action==='full-video'){
     const panel=$('#full-video-panel'),course=getCourse(button.dataset.id),open=button.getAttribute('aria-expanded')!=='true';
     button.setAttribute('aria-expanded',String(open));panel.hidden=!open;
-    panel.innerHTML=open?'<iframe title="本期完整记者会" src="https://www.youtube-nocookie.com/embed/'+course.source.videoId+'?rel=0" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe><a class="text-link" href="'+course.source.official+'" target="_blank" rel="noopener noreferrer">打开官方原片页面 ↗</a>':'';
+    document.querySelector('#podcast-player')?.pause();
+    panel.querySelector('video')?.pause();
+    panel.innerHTML=open?'<video controls playsinline preload="metadata" aria-label="本期完整记者会" src="'+course.source.mediaRoot+'/full-720p.mp4"></video>':'';
   }
+  else if(action==='full-audio'){
+    const panel=$('#podcast-panel'),course=getCourse(button.dataset.id),open=button.getAttribute('aria-expanded')!=='true';
+    button.setAttribute('aria-expanded',String(open));panel.hidden=!open;
+    document.querySelector('#full-video-panel video')?.pause();
+    disconnectPodcast?.();disconnectPodcast=null;
+    $('#podcast-player')?.pause();
+    panel.innerHTML=open?'<h2>随身听 · 第 '+course.number+' 期</h2><p>完整记者会原声 · 可下载 MP3 离线收听</p><audio id="podcast-player" controls preload="metadata" src="'+course.source.mediaRoot+'/full-audio.mp3"></audio><div class="podcast-controls"><button class="chip" data-action="podcast-seek" data-seconds="-15">后退 15 秒</button><button class="chip" data-action="podcast-seek" data-seconds="15">前进 15 秒</button><label>语速 <select id="podcast-speed"><option>0.75</option><option selected>1</option><option>1.25</option><option>1.5</option><option>2</option></select> ×</label></div><p class="muted">播放位置保存在本机；锁屏播放依设备支持。当前提供音频下载，尚未提供播客 RSS 订阅。</p>':'';
+    if(open){
+      const player=$('#podcast-player'),key='briefly-podcast-'+course.id;
+      player.addEventListener('error',()=>toast('本站音频暂时不可用，请确认媒体文件已准备好。'));
+      let storage;try{storage=localStorage;}catch{}
+      disconnectPodcast=connectPodcast(player,key,{storage,session:navigator.mediaSession,Metadata:window.MediaMetadata});
+      $('#podcast-speed').addEventListener('change',e=>player.playbackRate=Number(e.target.value));
+    }
+  }
+  else if(action==='podcast-seek'){const player=$('#podcast-player');if(player&&Number.isFinite(player.duration))player.currentTime=Math.max(0,Math.min(player.duration,player.currentTime+Number(button.dataset.seconds)));}
   else if(action==='record')startRecording();
   else if(action==='play-recording'){comparePlaying=false;playRecording();}
   else if(action==='compare'){if(!currentBlob)return;loop=false;comparePlaying=true;await playFrom(activeLesson.lines[currentLine].start);}

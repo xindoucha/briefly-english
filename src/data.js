@@ -1,6 +1,7 @@
 export const source = {
   title: 'Press Secretary Karoline Leavitt Briefs Members of the Media',
   date: '2025.01.28',
+  mediaRoot: '/media/first-briefing',
   videoId: 'xJOgsQQYDY4',
   official: 'https://www.whitehouse.gov/videos/press-secretary-karoline-leavitt-briefs-members-of-the-media-jan-28-2025/',
   commons: 'https://commons.wikimedia.org/wiki/File:Press_Secretary_Karoline_Leavitt_Briefs_Members_of_the_Media,_Jan._28,_2025.webm',

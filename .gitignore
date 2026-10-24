@@ -4,3 +4,7 @@ dist/
 .env
 .env.*
 !.env.example
+
+# Downloaded originals and generated large media (local only)
+media-source/
+media/

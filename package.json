@@ -7,7 +7,12 @@
     "dev": "node scripts/serve.mjs",
     "start": "node scripts/serve.mjs",
     "build": "node scripts/build.mjs",
-    "test": "node --test"
+    "test": "node --test",
+    "media:prepare": "node scripts/prepare-media.mjs",
+    "media:verify": "node scripts/verify-media.mjs",
+    "media:download": "node scripts/download-media.mjs"
   },
-  "engines": { "node": ">=22" }
+  "engines": {
+    "node": ">=22"
+  }
 }
